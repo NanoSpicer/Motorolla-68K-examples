@@ -1,0 +1,1199 @@
+000015E4 Starting Address
+Assembler used: EASy68K Editor/Assembler v5.15.04
+Created On: 30/01/2016 16:50:17
+
+00000000                             1  *-----------------------------------------------------------
+00000000                             2  * Program    : Main program to test list and list_plot libraries
+00000000                             3  * Written by : A. Burguera
+00000000                             4  * Creation   : 17-October-2014
+00000000                             5  * Last update: 14-October-2015 
+00000000                             6  * Description: The program creates an empty list, plots it and
+00000000                             7  *              allows some basic user interaction with it.
+00000000                             8  *              Note that EVERYTHING must work if TST_LIST_ITEM_SIZE or
+00000000                             9  *              TST_LIST_LIST_SIZE change. 
+00000000                            10  *              The files included are:
+00000000                            11  *              + SCREEN.X68: Includes some useful macros for graphics and
+00000000                            12  *                            text display.
+00000000                            13  *              + LIST.X68: The list library. It MUST provide, at least, 
+00000000                            14  *                          the interface functions.
+00000000                            15  *              + LIST_PLOT.X68: The list plot library. It MUST provide, 
+00000000                            16  *                          at least, the interface functions.
+00000000                            17  * Important  : You can modify this file to test your code. However,
+00000000                            18  *              the final version of your code MUST contain this
+00000000                            19  *              file EXACTLY as it is provided. Absolutely NO changes
+00000000                            20  *              in this file are allowed in the final version.
+00000000                            21  *-----------------------------------------------------------
+00001000                            22                          ORG     $1000
+00001000                            23                          OPT     MEX             ; Explicitly expands the macros. Useful for debugging.
+00001000                            24  ************************************************************
+00001000                            25  *                        CONSTANTS                         *
+00001000                            26  ************************************************************
+00001000  =0000000A                 27  TST_LIST_ITEM_SIZE:             EQU     10      ; How many data words has a data block ;; MY COMENT = ORIGINAL VALUE = 10
+00001000  =000000C8                 28  TST_LIST_LIST_SIZE:             EQU     200     ; The maximum number of data items ;; MY COMENT = ORIGINAL VALUE = 200
+00001000  =00000005                 29  TST_LIST_WORDS_HEADER:          EQU     5       ; How many header words. See comments in list.X68 about the header.
+00001000  =00000965                 30  TST_LIST_WORDS_TOTAL:           EQU     TST_LIST_WORDS_HEADER+TST_LIST_LIST_SIZE*(2+TST_LIST_ITEM_SIZE) ; Total size, in words, of the list
+00001000                            31  ************************************************************
+00001000                            32  
+00001000                            33  ************************************************************
+00001000                            34  *                   SOURCE FILE INCLUDES                   *
+00001000                            35  ************************************************************
+00001000                            36                          INCLUDE "screen.x68"
+00001000                            37  
+00001000                            38  SC_SET_RES      MACRO
+00001000                            39                  move.b  #33, D0
+00001000                            40                  move.l  #\1*$10000+\2, D1
+00001000                            41                  trap    #15
+00001000                            42                  ENDM
+00001000                            43                  
+00001000                            44  SC_SET_WINDOWED MACRO
+00001000                            45                  move.b  #33, D0
+00001000                            46                  move.l  #1, D1
+00001000                            47                  trap    #15
+00001000                            48                  ENDM
+00001000                            49                  
+00001000                            50  SC_SET_FULLSCREEN MACRO
+00001000                            51                  move.b  #33, D0
+00001000                            52                  move.l  #2, D1
+00001000                            53                  trap    #15
+00001000                            54                  ENDM
+00001000                            55                  
+00001000                            56  SC_LOCATE       MACRO           
+00001000                            57                  move.b  \1, D1  ; Put X coordinate
+00001000                            58                  lsl.w   #8, D1
+00001000                            59                  move.b  \2, D1  ; Put Y coordinate
+00001000                            60                  move.b  #11, D0
+00001000                            61                  trap    #15
+00001000                            62                  ENDM
+00001000                            63  
+00001000                            64  SC_SET_PEN      MACRO
+00001000                            65                  move.l  \1, D1
+00001000                            66                  move.b  #80, D0
+00001000                            67                  trap    #15
+00001000                            68                  ENDM
+00001000                            69  
+00001000                            70  SC_SET_FILL     MACRO
+00001000                            71                  move.l  \1, D1
+00001000                            72                  move.b  #81, D0
+00001000                            73                  trap    #15
+00001000                            74                  ENDM
+00001000                            75  SC_CLEAR        MACRO
+00001000                            76                  move.b  #11, D0
+00001000                            77                  move.w  #$FF00, D1
+00001000                            78                  trap    #15
+00001000                            79                  ENDM
+00001000                            80          
+00001000                            81  SC_PRINT_STR    MACRO
+00001000                            82                  lea     \1, A1
+00001000                            83                  move.b  #14, D0
+00001000                            84                  trap    #15
+00001000                            85                  ENDM
+00001000                            86                  
+00001000                            87  SC_ENABLE_DBUFFER MACRO
+00001000                            88                  move.b  #17, D1
+00001000                            89                  move.b  #92, D0
+00001000                            90                  trap    #15
+00001000                            91                  ENDM
+00001000                            92  
+00001000                            93  SC_DISABLE_DBUFFER MACRO
+00001000                            94                  move.b  #16, D1
+00001000                            95                  move.b  #92, D0
+00001000                            96                  trap    #15
+00001000                            97                  ENDM
+00001000                            98                  
+00001000                            99  SC_REPAINT_SCREEN MACRO
+00001000                           100                  move.b  #94, D0
+00001000                           101                  trap    #15
+00001000                           102                  ENDM
+00001000                           103  
+00001000                           104  
+00001000                           105  
+00001000                           106  
+00001000                           107  SC_DISP_STRNUM  MACRO
+00001000                           108                  LEA     \1, A1
+00001000                           109                  MOVE.L  \2,D1
+00001000                           110                  MOVE.B  #17, D0
+00001000                           111                  TRAP    #15
+00001000                           112                  ENDM
+00001000                           113  
+00001000                           114  SC_DRAW_RECT    MACRO
+00001000                           115                  MOVE.W \1,D1 ;ox
+00001000                           116                  MOVE.W \2,D2 ;oy
+00001000                           117                  
+00001000                           118                  MOVE.W D1,D3
+00001000                           119                  MOVE.W D2,D4
+00001000                           120                  
+00001000                           121                  ADD.W \3,D3 ;fx
+00001000                           122                  ADD.W \4,D4 ;fy
+00001000                           123                  
+00001000                           124                  MOVE.B  #87, D0
+00001000                           125                  TRAP    #15
+00001000                           126                  ENDM
+00001000                           127  
+00001000                           128  SC_GET_RES      MACRO
+00001000                           129                  MOVE    #0,D1
+00001000                           130                  MOVE.B  #33, D0
+00001000                           131                  TRAP    #15
+00001000                           132                  ENDM
+00001000                           133  
+00001000                           134  SC_DISPLAY_NUM  MACRO
+00001000                           135                  MOVE    \1,D1
+00001000                           136                  MOVE.B  #3, D0
+00001000                           137                  TRAP    #15
+00001000                           138                  ENDM
+00001000                           139  
+00001000                           140  -------------------- end include --------------------
+00001000                           141                          INCLUDE "list.x68"      ; List library
+00001000                           142  
+00001000                           143  
+00001000                           144  LS_INIT:
+00001000                           145                  ; PUSH registers that are going to be modified: A0, A1, D0.W, D1.L
+00001000                           146                  ; Note that we are pushing D0.L instead of D0.W. From the stack
+00001000                           147                  ; point of view, it would be better to push D0.W. However, this would
+00001000                           148                  ; require the use of a second PUSH instruction. In this case, we
+00001000                           149                  ; decided that pushing a LONG to avoid a second push is better for
+00001000                           150                  ; performance.
+00001000  48E7 C0C0                151                  movem.l D0-D1/A0-A1, -(A7)
+00001004                           152                  ; Pushing 4 LONG means pushing 16 bytes. Thus, 16 has to be added in
+00001004                           153                  ; subsequent stack accesses.
+00001004                           154  
+00001004                           155                  ; Access to the stack parameters                
+00001004  4281                     156                  clr.l D1                ; Clears all the bits in D1. Required as it 
+00001006                           157                                          ; is going to be added to an address            
+00001006  206F 0014                158                  move.l 20(A7), A0       ; The list pointer
+0000100A  302F 0018                159                  move.w 24(A7), D0       ; The list size (M)
+0000100E  322F 001A                160                  move.w 26(A7), D1       ; The data size (N)
+00001012                           161                  
+00001012                           162                  ; 1.- Init N to the specified value
+00001012  3081                     163                  move.w  D1, (A0)
+00001014                           164                  
+00001014                           165                  ; 2.- Init OCCUPIED to NULL
+00001014  217C 00000000 0002       166                  move.l #0, 2(A0)
+0000101C                           167                  
+0000101C                           168                  ; 3.- Init FREE to a pointer to the first data block
+0000101C  2248                     169                  move.l  A0, A1
+0000101E  D3FC 0000000A            170                  add.l   #10, A1         ; Compute the first data block address
+00001024  2149 0006                171                  move.l  A1, 6(A0)       ; Move the computed value to FREE 
+00001028                           172  
+00001028                           173                  ; 4.- Inits the NEXT field in all the data blocks to point to the "physically" 
+00001028                           174                  ; next block, except for the last one which is initialized to NULL.
+00001028                           175                                  
+00001028  2049                     176                  move.l  A1, A0          ; Now A0 points to the first data block
+0000102A  E381                     177                  asl.l   #1, D1          ; Now D1 holds the data size in bytes
+0000102C  5881                     178                  addq.l  #4, D1          ; Now D1 holds the whole data block size (data size+4)
+0000102E  5540                     179                  subq.w  #2, D0          ; Prepare D0 for the following DBRA
+00001030                           180                  
+00001030                           181  .LOOP:          
+00001030  D3C1                     182                  add.l   D1, A1          ; Now A1 points to the "physical" next item             
+00001032  2089                     183                  move.l  A1, (A0)        ; Pointer to the next item
+00001034  2049                     184                  move.l  A1, A0          ; Let A0 be the next item
+00001036  51C8 FFF8                185                  dbra    D0, .LOOP
+0000103A                           186                  
+0000103A  20BC 00000000            187                  move.l  #0, (A0)        ; Put the null pointer on the last item.
+00001040                           188                  
+00001040                           189                  ; Restore the registers
+00001040  4CDF 0303                190                  movem.l (A7)+, D0-D1/A0-A1
+00001044  4E75                     191                  rts
+00001046                           192                  
+00001046                           193  
+00001046                           194  LS_PUT:
+00001046                           195                  ; PUSH the registers that are going to be modified: A0, A1, A2, D0.L
+00001046                           196                  ; 4 LONG = 16 BYTE. Thus, add 16 to subsequent stack accesses
+00001046  48E7 80E0                197                  movem.l A0-A2/D0, -(A7)
+0000104A                           198                  
+0000104A                           199                  ; Access the stack parameters
+0000104A  206F 0014                200                  move.l  20(A7), A0      ; List pointer
+0000104E  224F                     201                  move.l  A7, A1
+00001050  D3FC 00000018            202                  add.l   #24, A1         ; Pointer to the data
+00001056                           203                  
+00001056                           204                  ; FIRSTBLOCK <- FREE
+00001056  2028 0006                205                  move.l  6(A0), D0
+0000105A  8080                     206                  or.l    D0,D0
+0000105C  6700 0024                207                  beq     .LIST_FULL      ; If the FREE pointer is NULL, full list
+00001060  2440                     208                  move.l  D0, A2          ; A2: First free data block (FIRSTBLOCK)
+00001062                           209                  
+00001062                           210                  ; FREE <- (FIRSTBLOCK).NEXT
+00001062  2152 0006                211                  move.l  (A2), 6(A0)     ; FREE points to the NEXT field
+00001066                           212                  
+00001066                           213                  ; (FIRSTBLOCK).NEXT <- OCCUPIED
+00001066  24A8 0002                214                  move.l  2(A0), (A2)
+0000106A                           215                  
+0000106A                           216                  ; OCCUPIED <- FIRSTBLOCK
+0000106A  214A 0002                217                  move.l  A2, 2(A0)
+0000106E                           218                  
+0000106E                           219                  ; Prepare the output parameter
+0000106E  2F4A 0014                220                  move.l  A2, 20(A7)
+00001072                           221                  
+00001072                           222                  ; Copy the data
+00001072  588A                     223                  add.l   #4, A2          ; Point to the data itself
+00001074  3010                     224                  move.w  (A0), D0        ; Item size
+00001076  5340                     225                  subq.w  #1, D0          ; Prepare for DBRA                                              
+00001078  34D9                     226  .LOOP:          move.w  (A1)+, (A2)+
+0000107A  51C8 FFFC                227                  dbra    D0, .LOOP
+0000107E  6000 000A                228                  bra     .END
+00001082                           229                  
+00001082                           230                  ; If the list is full, return $FFFFFFFF
+00001082  2F7C FFFFFFFF 0014       231  .LIST_FULL:     move.l  #$FFFFFFFF, 20(A7)
+0000108A                           232  
+0000108A                           233                  ; POP registers
+0000108A  4CDF 0701                234  .END:           movem.l (A7)+, A0-A2/D0
+0000108E  4E75                     235                  rts             
+00001090                           236                                  
+00001090                           237  LS_REMOVE:
+00001090                           238          
+00001090  48E7 00F0                239          MOVEM.L A0-A3,-(A7)
+00001094                           240          
+00001094  206F 0018                241          MOVE.L 24(A7),A0 ;A0 = @ ELEMENT
+00001098  226F 0014                242          MOVE.L 20(A7),A1 ;A1 = @ LIST
+0000109C                           243          
+0000109C  2F08                     244          MOVE.L A0,-(A7)
+0000109E  2F09                     245          MOVE.L A1,-(A7)
+000010A0  6100 00BC                246          BSR LS_PREVIOUS
+000010A4  588F                     247          ADDQ.L #4,A7    ; RESET
+000010A6  245F                     248          MOVE.L (A7)+,A2 ;A2 = @ PREVIOUS
+000010A8                           249          
+000010A8                           250          
+000010A8  B5FC FFFFFFFF            251          CMP.L #$FFFFFFFF,A2
+000010AE  6700 0024                252          BEQ .noTePrevi
+000010B2                           253          .tePrevi:
+000010B2  2F08                     254                  MOVE.L A0,-(A7)
+000010B4  2F09                     255                  MOVE.L A1,-(A7)
+000010B6  6100 007C                256                  BSR LS_NEXT
+000010BA  588F                     257                  ADDQ.L #4,A7 ; RESET
+000010BC  265F                     258                  MOVE.L (A7)+,A3 ; A3 = @ NEXT
+000010BE                           259                  
+000010BE  B7FC FFFFFFFF            260                  CMP.L #$FFFFFFFF,A3
+000010C4  6600 0008                261                  BNE .teNextP
+000010C8  267C 00000000            262                  MOVE.L #$0,A3
+000010CE                           263                  .teNextP:
+000010CE  248B                     264                  MOVE.L A3,(A2)      ; 1º LONG OF BLOCK = @ NEXT
+000010D0                           265                  
+000010D0  6000 0026                266                  BRA .afegirALliures
+000010D4                           267          .noTePrevi:
+000010D4  2F08                     268                  MOVE.L A0,-(A7)
+000010D6  2F09                     269                  MOVE.L A1,-(A7)
+000010D8  6100 005A                270                  BSR LS_NEXT
+000010DC  588F                     271                  ADDQ.L #4,A7 ; RESET
+000010DE  265F                     272                  MOVE.L (A7)+,A3 ; A3 = @ NEXT
+000010E0                           273                  
+000010E0  B7FC FFFFFFFF            274                  CMP.L #$FFFFFFFF,A3
+000010E6  6600 0008                275                  BNE .teNextNP
+000010EA  267C 00000000            276                  MOVE.L #$0,A3
+000010F0                           277                  .teNextNP:
+000010F0  234B 0002                278                  MOVE.L A3,2(A1)       ; OCCUPIED = @NEXT
+000010F4                           279                  
+000010F4  6000 0002                280                  BRA .afegirALliures
+000010F8                           281  
+000010F8                           282          .afegirALliures:
+000010F8                           283                  
+000010F8  2669 0006                284                  MOVE.L 6(A1),A3
+000010FC  2348 0006                285                  MOVE.L A0,6(A1)
+00001100  208B                     286                  MOVE.L A3,(A0)
+00001102                           287                  
+00001102  4CDF 0F00                288                  MOVEM.L (A7)+,A0-A3
+00001106  4E75                     289          rts
+00001108                           290  
+00001108                           291  LS_FIRST:
+00001108                           292          ; PUSH: A0,A1. 2 LONG=8Byte. Add 8 to all stack references
+00001108  48E7 00C0                293          movem.l A0-A1, -(A7)
+0000110C                           294  
+0000110C                           295          ; Get the list pointer
+0000110C  206F 000C                296          move.l  12(A7), A0
+00001110                           297          
+00001110                           298          ; Get the pointer to the first occupied
+00001110  2268 0002                299          move.l  2(A0), A1
+00001114                           300          
+00001114                           301          ; Is it null?
+00001114  B3FC 00000000            302          cmp.l   #0, A1
+0000111A  6700 000A                303          beq     .ISNULL
+0000111E                           304          
+0000111E                           305          ; Output pointer
+0000111E  2F49 000C                306          move.l  A1, 12(A7)
+00001122  6000 000A                307          bra     .END
+00001126                           308          
+00001126                           309          ; If NULL, output #$FFFFFFFF
+00001126  2F7C FFFFFFFF 000C       310  .ISNULL: move.l #$FFFFFFFF, 12(A7)
+0000112E                           311  .END:   ; POP registers
+0000112E  4CDF 0300                312          movem.l (A7)+, A0-A1
+00001132  4E75                     313          rts     
+00001134                           314  
+00001134                           315  LS_NEXT:
+00001134  48E7 8080                316                  MOVEM.L A0/D0,-(A7)
+00001138                           317                  
+00001138  206F 0010                318                  MOVE.L 16(A7),A0 ; @ of the given element
+0000113C  2010                     319                  MOVE.L (A0),D0
+0000113E  2040                     320                  MOVE.L D0,A0   ; @ of the next element from the given one
+00001140                           321                  
+00001140  B1FC 00000000            322                  CMP.L #$0,A0
+00001146  6700 0006                323                  BEQ .isNULL
+0000114A                           324                  
+0000114A  6000 0008                325                  BRA .endOSR
+0000114E                           326                  
+0000114E                           327                  .isNULL:
+0000114E  207C FFFFFFFF            328                  MOVE.L #$FFFFFFFF,A0
+00001154                           329                  .endOSR:
+00001154  2F48 0010                330                  MOVE.L A0,16(A7)
+00001158                           331                  
+00001158  4CDF 0101                332                  MOVEM.L (A7)+,A0/D0
+0000115C  4E75                     333                  rts             
+0000115E                           334  
+0000115E                           335  LS_PREVIOUS:
+0000115E  48E7 80E0                336                  MOVEM.L A0-A2/D0,-(A7)
+00001162                           337                  
+00001162  206F 0014                338                  MOVE.L 20(A7),A0 ; A0 HOLDS @ OF LIST
+00001166  5448                     339                  ADDQ   #2,A0       ; A0 POINTS TO THE @ OF FIRST BLOCK
+00001168  2010                     340                  MOVE.L (A0),D0   ; D0 HAS THE @ OF THE FIRST BLOCK.
+0000116A  2040                     341                  MOVE.L D0,A0     ; A0 HOLDS THE @ OF THE FIRST BLOCK
+0000116C                           342                  
+0000116C  246F 0018                343                  MOVE.L 24(A7),A2 ; A1 HOLDS @ OF THE ELEMENT THAT WE NEED
+00001170                           344                                   ; TO GET THE PREVIOUS ONE
+00001170                           345                                   
+00001170  B5C8                     346                  CMP.L A0,A2
+00001172  6700 0018                347                  BEQ .hasNOPrevious
+00001176                           348                  
+00001176                           349                  
+00001176                           350                  .LOOP:
+00001176  2010                     351                  MOVE.L (A0),D0
+00001178  2240                     352                  MOVE.L D0,A1
+0000117A  B5C9                     353                  CMP.L A1,A2
+0000117C  6700 0006                354                  BEQ .FINISH
+00001180  2049                     355                  MOVE.L A1,A0
+00001182  60F2                     356                  BRA .LOOP
+00001184                           357                  
+00001184                           358                  .FINISH:
+00001184  2F48 0018                359                  MOVE.L A0,24(A7)
+00001188  6000 000A                360                  BRA .endOSR
+0000118C                           361                  .hasNOPrevious:
+0000118C  2F7C FFFFFFFF 0018       362                  MOVE.L #$FFFFFFFF,24(A7)
+00001194                           363                  .endOSR:
+00001194  4CDF 0701                364                  MOVEM.L (A7)+,A0-A2/D0
+00001198  4E75                     365                  rts             
+0000119A                           366  
+0000119A                           367  LS_COUNT:
+0000119A                           368                  ; PUSH registers A0, A1, D0.W. 10 bytes. Add 10
+0000119A                           369                  ; to stack references
+0000119A  48E7 00C0                370                  movem.l A0-A1, -(A7)
+0000119E  3F00                     371                  move.w  D0, -(A7)
+000011A0                           372                  
+000011A0                           373                  ; Get some parameters
+000011A0  206F 000E                374                  move.l  14(A7), A0      ; List pointer
+000011A4  2248                     375                  move.l  A0, A1
+000011A6  5489                     376                  add.l   #2, A1          ; Pointer to the first item pointer
+000011A8                           377                  
+000011A8                           378                  ; Init the counter
+000011A8  303C 0000                379                  move.w  #0, D0
+000011AC                           380                  
+000011AC                           381                  ; Do the count
+000011AC  0C91 00000000            382  .LOOP:          cmp.l   #0, (A1)
+000011B2  6700 0008                383                  beq     .END
+000011B6  5240                     384                  addq.w  #1, D0
+000011B8  2251                     385                  move.l  (A1), A1
+000011BA  60F0                     386                  bra     .LOOP
+000011BC                           387                  
+000011BC                           388                  ; Output the result
+000011BC  3F40 000E                389  .END:           move.w  D0, 14(A7)
+000011C0                           390  
+000011C0                           391                  ; POP registers
+000011C0  301F                     392                  move.w  (A7)+, D0
+000011C2  4CDF 0300                393                  movem.l (A7)+, A0-A1
+000011C6  4E75                     394                  rts             
+000011C8                           395  
+000011C8                           396  LS_GET_ITEM:
+000011C8                           397                  ; regs
+000011C8  48E7 E080                398                  MOVEM.L D0-D2/A0,-(A7)
+000011CC                           399                  
+000011CC                           400                  
+000011CC  202F 0018                401                  MOVE.L 24(A7),D0 ; index
+000011D0  206F 0014                402                  MOVE.L 20(A7),A0 ; @LIST
+000011D4  5488                     403                  ADDQ.L #2,A0     ; A0 POINTS @ 1º BLOCK
+000011D6                           404                  
+000011D6                           405                  
+000011D6  4281                     406                  CLR.L D1         ; use d1 as a counter
+000011D8                           407                  
+000011D8                           408                  .loop:
+000011D8                           409                  
+000011D8  2410                     410                          MOVE.L (A0),D2
+000011DA  2042                     411                          MOVE.L D2,A0
+000011DC                           412                          
+000011DC  B041                     413                          CMP D1,D0
+000011DE  6700 001A                414                          BEQ .return
+000011E2                           415                          
+000011E2  0C90 00000000            416                          CMP.L #0,(A0)
+000011E8  6700 000A                417                          BEQ .returnNULL
+000011EC                           418                                  .incrementAndLoop:
+000011EC  5241                     419                                          ADDQ #1,D1
+000011EE  60E8                     420                                          BRA .loop
+000011F0  6000 0008                421                          BRA .return
+000011F4                           422                  .returnNULL:
+000011F4  207C FFFFFFFF            423                          MOVE.L #$FFFFFFFF,A0
+000011FA                           424                  .return:
+000011FA  2F48 0018                425                          MOVE.L A0,24(A7)
+000011FE                           426                          
+000011FE  4CDF 0107                427                  MOVEM.L (A7)+,D0-D2/A0
+00001202  4E75                     428                  rts
+00001204                           429  
+00001204                           430  
+00001204                           431  
+00001204                           432  
+00001204                           433  
+00001204                           434  
+00001204                           435  
+00001204                           436  
+00001204                           437  
+00001204                           438  
+00001204                           439  
+00001204                           440  
+00001204                           441  -------------------- end include --------------------
+00001204                           442                          INCLUDE "list_plot.x68"
+00001204                           443  
+00001204  =000000C8                444  LP_INITIAL_Y            EQU     200     ; Initial Y coordinate to plot the list.
+00001204  =00000014                445  LP_NEW_X                EQU     20      ; NEW ITEM button left coordinate.
+00001204  =00000014                446  LP_NEW_Y                EQU     20      ; NEW ITEM button right coordinate.
+00001204  =00000040                447  LP_NEW_WIDTH            EQU     64      ; NEW ITEM button width.
+00001204  =00000020                448  LP_NEW_HEIGHT           EQU     32      ; NEW ITEM button height
+00001204  =00000020                449  LP_ITEM_WIDTH           EQU     32      ; Item rectangle width
+00001204  =00000020                450  LP_ITEM_HEIGHT          EQU     32      ; Item rectangle height
+00001204  =00000280                451  LP_SCREEN_WIDTH         EQU     640     ; Screen width
+00001204  =000001E0                452  LP_SCREEN_HEIGHT        EQU     480     ; Screen height
+00001204                           453  
+00001204                           454  LP_INSTALL:
+00001204  48A7 C000                455                  movem.w D0-D1, -(A7)
+00001208                           456  
+00001208                           457                  ; Install mouse         
+00001208  21FC 0000156A 0064       458                  move.l  #LP_ISR_MOUSE_MOVE, ($64) ; Associate ISR to level 1 interrupt. This is crucial: first put
+00001210                           459                                                  ; the ISR in the exceptions vector, then enable mouse interrupt. 
+00001210                           460                                                  ; Otherwise, an error may happen if mouse moves before the ISR
+00001210                           461                                                  ; has been defined.
+00001210                           462          
+00001210  323C 0107                463                  move.w  #$0107, D1              ; Interrupt 1 when mouse moves or a button is pressed
+00001214  103C 003C                464                  move.b  #60, D0
+00001218  4E4F                     465                  trap    #15                     ; Enable interrupt
+0000121A                           466                  
+0000121A                           467                  ; Prepare output window
+0000121A                           468m                 SC_SET_RES LP_SCREEN_WIDTH, LP_SCREEN_HEIGHT    ; Set screen resolution
+0000121A  103C 0021                469m                 MOVE.B  #33, D0
+0000121E  223C 028001E0            470m                 MOVE.L  #LP_SCREEN_WIDTH*$10000+LP_SCREEN_HEIGHT, D1
+00001224  4E4F                     471m                 TRAP    #15
+00001226                           472m                 ENDM
+00001226                           473m                 SC_SET_WINDOWED                 ; Set windowed mode
+00001226  103C 0021                474m                 MOVE.B  #33, D0
+0000122A  7201                     475m                 MOVE.L  #1, D1
+0000122C  4E4F                     476m                 TRAP    #15
+0000122E                           477m                 ENDM
+0000122E                           478m                 SC_ENABLE_DBUFFER               ; Enable double buffer
+0000122E  123C 0011                479m                 MOVE.B  #17, D1
+00001232  103C 005C                480m                 MOVE.B  #92, D0
+00001236  4E4F                     481m                 TRAP    #15
+00001238                           482m                 ENDM
+00001238                           483                  
+00001238                           484                  ; Initialize the variable used to generate sequential numbers when creating new items
+00001238  33FC 0000 0000159A       485                  move.w  #0, (LP_ITEM_LAST)
+00001240                           486                                  
+00001240  4C9F 0003                487                  movem.w (A7)+, D0-D1
+00001244  4E75                     488                  rts
+00001246                           489  
+00001246                           490  LP_PLOT_UI:
+00001246                           491                  
+00001246                           492                  ; SAVE REGISTERS
+00001246  48E7 FFC0                493                  MOVEM.L D0-D7/A0-A1, -(A7)
+0000124A                           494                  ; UNDRAW THE SCREEN
+0000124A                           495                  *** this will use registers D0 and D1 ***
+0000124A                           496                                  
+0000124A                           497                                  
+0000124A                           498m                                 SC_REPAINT_SCREEN
+0000124A  103C 005E                499m                 MOVE.B  #94, D0
+0000124E  4E4F                     500m                 TRAP    #15
+00001250                           501m                 ENDM
+00001250                           502                                  
+00001250                           503                  ;1º DRAW RECTANGLE AT THE TOP LEFT PART (white and red)
+00001250                           504m                         SC_SET_PEN #$00FFFFFF
+00001250  223C 00FFFFFF            505m                 MOVE.L  #$00FFFFFF, D1
+00001256  103C 0050                506m                 MOVE.B  #80, D0
+0000125A  4E4F                     507m                 TRAP    #15
+0000125C                           508m                 ENDM
+0000125C                           509m                         SC_SET_FILL #$000000FF
+0000125C  223C 000000FF            510m                 MOVE.L  #$000000FF, D1
+00001262  103C 0051                511m                 MOVE.B  #81, D0
+00001266  4E4F                     512m                 TRAP    #15
+00001268                           513m                 ENDM
+00001268                           514m                         SC_DRAW_RECT #LP_NEW_X,#LP_NEW_Y,#LP_NEW_WIDTH,#LP_NEW_HEIGHT
+00001268  323C 0014                515m                 MOVE.W #LP_NEW_X,D1 ;OX
+0000126C  343C 0014                516m                 MOVE.W #LP_NEW_Y,D2 ;OY
+00001270                           517m                 
+00001270  3601                     518m                 MOVE.W D1,D3
+00001272  3802                     519m                 MOVE.W D2,D4
+00001274                           520m                 
+00001274  0643 0040                521m                 ADD.W #LP_NEW_WIDTH,D3 ;FX
+00001278  0644 0020                522m                 ADD.W #LP_NEW_HEIGHT,D4 ;FY
+0000127C                           523m                 
+0000127C  103C 0057                524m                 MOVE.B  #87, D0
+00001280  4E4F                     525m                 TRAP    #15
+00001282                           526m                 ENDM
+00001282                           527                  ; END OF PART 1
+00001282                           528                  ;2º DRAW AS MANY BOXES AS ITEMS THE LIST HAS
+00001282                           529                          
+00001282                           530m                         SC_SET_PEN #$00000000
+00001282  7200                     531m                 MOVE.L  #$00000000, D1
+00001284  103C 0050                532m                 MOVE.B  #80, D0
+00001288  4E4F                     533m                 TRAP    #15
+0000128A                           534m                 ENDM
+0000128A                           535m                         SC_SET_FILL #$00000000
+0000128A  7200                     536m                 MOVE.L  #$00000000, D1
+0000128C  103C 0051                537m                 MOVE.B  #81, D0
+00001290  4E4F                     538m                 TRAP    #15
+00001292                           539m                 ENDM
+00001292                           540m                         SC_DRAW_RECT #0,#LP_INITIAL_Y,#LP_SCREEN_WIDTH,#LP_SCREEN_WIDTH  ; ERASE OLD BLOCKS :>
+00001292  323C 0000                541m                 MOVE.W #0,D1 ;OX
+00001296  343C 00C8                542m                 MOVE.W #LP_INITIAL_Y,D2 ;OY
+0000129A                           543m                 
+0000129A  3601                     544m                 MOVE.W D1,D3
+0000129C  3802                     545m                 MOVE.W D2,D4
+0000129E                           546m                 
+0000129E  0643 0280                547m                 ADD.W #LP_SCREEN_WIDTH,D3 ;FX
+000012A2  0644 0280                548m                 ADD.W #LP_SCREEN_WIDTH,D4 ;FY
+000012A6                           549m                 
+000012A6  103C 0057                550m                 MOVE.B  #87, D0
+000012AA  4E4F                     551m                 TRAP    #15
+000012AC                           552m                 ENDM
+000012AC                           553                          
+000012AC                           554                          
+000012AC                           555                          ; we need to know how many elements we're going to draw:
+000012AC                           556                          
+000012AC  2F2F 002C                557                          MOVE.L 44(A7),-(A7)
+000012B0                           558                          
+000012B0  6100 FEE8                559                          BSR LS_COUNT    ; we count the amount of elements that the list
+000012B4                           560                                          ; is holding
+000012B4                           561                          
+000012B4  3A1F                     562                          MOVE.W (A7)+,D5 ; D5 holds the amount of items that are figure
+000012B6                           563                                          ; in. 
+000012B6  544F                     564                          ADDQ #2,A7      ; we pick a word, but a long is occupied, so +2 to restore A7
+000012B8                           565                          
+000012B8                           566                                          ; i do move out LONG so SP points at the last
+000012B8                           567                                          ; pushed element, because the subroutine
+000012B8                           568                                          ; requires of a long word with @ of the list
+000012B8                           569                                          ; to count of
+000012B8                           570                          
+000012B8  BA7C 0000                571                          CMP #0,D5
+000012BC                           572                          
+000012BC  6700 006C                573                          BEQ .dontDraw   ; if there are no elements in the list
+000012C0                           574                                          ; we don't have to draw anything
+000012C0                           575                                          
+000012C0                           576                          
+000012C0  5385                     577                          SUBQ.L #1,D5    ; we prepare D5 for the drawing
+000012C2                           578                                          ; iteration.
+000012C2                           579              
+000012C2  3F3C 0000                580                                  MOVE.W #0,-(A7) ; booking space
+000012C6  6100 02E8                581                                  BSR LP_ITEMS_PER_LINE
+000012CA  3E1F                     582                                  MOVE.W (A7)+,D7 ; D7 holds the amount of elements that a line can hold
+000012CC                           583                                  
+000012CC                           584                          ; drawing elements part
+000012CC                           585m                                 SC_SET_PEN #$00FFFFFF
+000012CC  223C 00FFFFFF            586m                 MOVE.L  #$00FFFFFF, D1
+000012D2  103C 0050                587m                 MOVE.B  #80, D0
+000012D6  4E4F                     588m                 TRAP    #15
+000012D8                           589m                 ENDM
+000012D8                           590m                                 SC_SET_FILL #$00FF0000
+000012D8  223C 00FF0000            591m                 MOVE.L  #$00FF0000, D1
+000012DE  103C 0051                592m                 MOVE.B  #81, D0
+000012E2  4E4F                     593m                 TRAP    #15
+000012E4                           594m                 ENDM
+000012E4  4280                     595                                  CLR.L D0 ; will be used to draw rectangles
+000012E6  4281                     596                                  CLR.L D1
+000012E8  4282                     597                                  CLR.L D2
+000012EA  4283                     598                                  CLR.L D3 ; I'll use D3 as a counter
+000012EC  4284                     599                                  CLR.L D4
+000012EE  343C 00C8                600                                  MOVE.W #LP_INITIAL_Y,D2 ; Y coordenate to draw rectangles
+000012F2                           601                          .drawElements:
+000012F2                           602m                                 SC_DRAW_RECT D0, D2, #LP_ITEM_WIDTH, #LP_ITEM_HEIGHT
+000012F2  3200                     603m                 MOVE.W D0,D1 ;OX
+000012F4  3402                     604m                 MOVE.W D2,D2 ;OY
+000012F6                           605m                 
+000012F6  3601                     606m                 MOVE.W D1,D3
+000012F8  3802                     607m                 MOVE.W D2,D4
+000012FA                           608m                 
+000012FA  0643 0020                609m                 ADD.W #LP_ITEM_WIDTH,D3 ;FX
+000012FE  0644 0020                610m                 ADD.W #LP_ITEM_HEIGHT,D4 ;FY
+00001302                           611m                 
+00001302  103C 0057                612m                 MOVE.B  #87, D0
+00001306  4E4F                     613m                 TRAP    #15
+00001308                           614m                 ENDM
+00001308  5246                     615                                  ADDQ #1,D6
+0000130A  4240                     616                                  CLR D0
+0000130C  0640 0020                617                                  ADD #LP_ITEM_WIDTH,D0 ; adding and multiplying to 
+00001310  C0C6                     618                                  MULU.W D6,D0          ; get the following X point
+00001312                           619         
+00001312  BC47                     620                                  CMP D7,D6             ; compare the amount of drawed
+00001314                           621                                                        ; elements with amount of elements
+00001314                           622                                                        ; per line
+00001314                           623                                                        
+00001314  6600 000E                624                                  BNE .dontChangeLine   
+00001318                           625                                                        ; if we haven't reached the top
+00001318                           626                                                        ; amount per elements per line,
+00001318                           627                                                        ; we must not change the line
+00001318                           628                                                        ; where we're about to draw
+00001318                           629                                                        
+00001318                           630                                                        ; Otherwise we reset the X draw
+00001318                           631                                                        ; point and we update the Y draw
+00001318                           632                                                        ; point as below
+00001318  0642 0020                633                                  ADD  #LP_ITEM_HEIGHT,D2
+0000131C  303C 0000                634                                  MOVE #0,D0
+00001320  3C3C 0000                635                                  MOVE #0,D6
+00001324                           636                                  .dontChangeLine:
+00001324  51CD FFCC                637                          DBRA D5,.drawElements
+00001328                           638                          
+00001328  4285                     639                          CLR.L D5
+0000132A                           640                          .dontDraw:
+0000132A                           641                          ; end of drawing elements part 
+0000132A                           642                  ;END OF PART 2
+0000132A                           643                          
+0000132A                           644                  
+0000132A                           645                  
+0000132A                           646                  ;3º PRINTS THE STRING ITEM_COUNT: X
+0000132A                           647                          
+0000132A                           648m                         SC_SET_PEN #$00000000
+0000132A  7200                     649m                 MOVE.L  #$00000000, D1
+0000132C  103C 0050                650m                 MOVE.B  #80, D0
+00001330  4E4F                     651m                 TRAP    #15
+00001332                           652m                 ENDM
+00001332                           653m                         SC_SET_FILL #$00000000
+00001332  7200                     654m                 MOVE.L  #$00000000, D1
+00001334  103C 0051                655m                 MOVE.B  #81, D0
+00001338  4E4F                     656m                 TRAP    #15
+0000133A                           657m                 ENDM
+0000133A                           658m                         SC_DRAW_RECT #0,#0,#LP_SCREEN_WIDTH,#LP_NEW_Y-1
+0000133A  323C 0000                659m                 MOVE.W #0,D1 ;OX
+0000133E  343C 0000                660m                 MOVE.W #0,D2 ;OY
+00001342                           661m                 
+00001342  3601                     662m                 MOVE.W D1,D3
+00001344  3802                     663m                 MOVE.W D2,D4
+00001346                           664m                 
+00001346  0643 0280                665m                 ADD.W #LP_SCREEN_WIDTH,D3 ;FX
+0000134A  0644 0013                666m                 ADD.W #LP_NEW_Y-1,D4 ;FY
+0000134E                           667m                 
+0000134E  103C 0057                668m                 MOVE.B  #87, D0
+00001352  4E4F                     669m                 TRAP    #15
+00001354                           670m                 ENDM
+00001354                           671                          
+00001354                           672m                         SC_LOCATE #0,#0
+00001354  123C 0000                673m                 MOVE.B  #0, D1  ; PUT X COORDINATE
+00001358  E149                     674m                 LSL.W   #8, D1
+0000135A  123C 0000                675m                 MOVE.B  #0, D1  ; PUT Y COORDINATE
+0000135E  103C 000B                676m                 MOVE.B  #11, D0
+00001362  4E4F                     677m                 TRAP    #15
+00001364                           678m                 ENDM
+00001364                           679m                         SC_SET_FILL #00000000
+00001364  7200                     680m                 MOVE.L  #00000000, D1
+00001366  103C 0051                681m                 MOVE.B  #81, D0
+0000136A  4E4F                     682m                 TRAP    #15
+0000136C                           683m                 ENDM
+0000136C  4286                     684                          CLR.L D6
+0000136E  2F2F 002C                685                          MOVE.L 44(A7),-(A7)
+00001372  6100 FE26                686                          BSR LS_COUNT
+00001376  3C1F                     687                          MOVE.W (A7)+,D6
+00001378  544F                     688                          ADDQ #2,A7
+0000137A                           689                          
+0000137A                           690m                         SC_DISP_STRNUM STRING,D6
+0000137A  43F9 000015A0            691m                 LEA     STRING, A1
+00001380  2206                     692m                 MOVE.L  D6,D1
+00001382  103C 0011                693m                 MOVE.B  #17, D0
+00001386  4E4F                     694m                 TRAP    #15
+00001388                           695m                 ENDM
+00001388                           696                                                  
+00001388                           697                          ;END OF PART 3
+00001388                           698                  
+00001388                           699                  ;4º PRINTS THE VALUES OF THE DATABLOCK POINTER BY LP_ITEM_SEL
+00001388                           700                          
+00001388                           701                          
+00001388                           702m                         SC_SET_PEN #$00000000
+00001388  7200                     703m                 MOVE.L  #$00000000, D1
+0000138A  103C 0050                704m                 MOVE.B  #80, D0
+0000138E  4E4F                     705m                 TRAP    #15
+00001390                           706m                 ENDM
+00001390                           707m                         SC_SET_FILL #$00000000
+00001390  7200                     708m                 MOVE.L  #$00000000, D1
+00001392  103C 0051                709m                 MOVE.B  #81, D0
+00001396  4E4F                     710m                 TRAP    #15
+00001398                           711m                 ENDM
+00001398                           712m                         SC_DRAW_RECT #320,#0,#320,#LP_INITIAL_Y-1  ; ERASE RESTOS
+00001398  323C 0140                713m                 MOVE.W #320,D1 ;OX
+0000139C  343C 0000                714m                 MOVE.W #0,D2 ;OY
+000013A0                           715m                 
+000013A0  3601                     716m                 MOVE.W D1,D3
+000013A2  3802                     717m                 MOVE.W D2,D4
+000013A4                           718m                 
+000013A4  0643 0140                719m                 ADD.W #320,D3 ;FX
+000013A8  0644 00C7                720m                 ADD.W #LP_INITIAL_Y-1,D4 ;FY
+000013AC                           721m                 
+000013AC  103C 0057                722m                 MOVE.B  #87, D0
+000013B0  4E4F                     723m                 TRAP    #15
+000013B2                           724m                 ENDM
+000013B2                           725                          
+000013B2  2039 0000159C            726                          MOVE.L (LP_ITEM_SEL),D0 ;because we cant move the content of an adress directly to an adress register
+000013B8                           727                          
+000013B8  B0BC FFFFFFFF            728                          CMP.L #$FFFFFFFF,D0
+000013BE                           729                          
+000013BE  6700 0038                730                          BEQ .noItemSelected
+000013C2                           731                          .ItemSelected:
+000013C2                           732                          
+000013C2  2040                     733                          MOVE.L D0,A0
+000013C4  5888                     734                          ADDA.L #4,A0    ; A0 POINTS TO THE FIRST DATA word
+000013C6                           735                                          
+000013C6                           736                                            
+000013C6                           737                                          
+000013C6  226F 002C                738                          MOVE.L 44(A7),A1 ; A1 = @LIST
+000013CA  3811                     739                          MOVE.W (A1),D4   ; D4 = AMOUNT OF WORDS OF DATA.
+000013CC                           740                                           ; prepare d0 for the dbra
+000013CC                           741                                          
+000013CC  5344                     742                          SUBQ #1,D4
+000013CE                           743                          
+000013CE  4280                     744                          CLR.L D0
+000013D0  4281                     745                          CLR.L D1
+000013D2  4282                     746                          CLR.L D2
+000013D4  4283                     747                          CLR.L D3
+000013D6                           748                          .loop:
+000013D6                           749m                                 SC_LOCATE #45,D3
+000013D6  123C 002D                750m                 MOVE.B  #45, D1 ; PUT X COORDINATE
+000013DA  E149                     751m                 LSL.W   #8, D1
+000013DC  1203                     752m                 MOVE.B  D3, D1  ; PUT Y COORDINATE
+000013DE  103C 000B                753m                 MOVE.B  #11, D0
+000013E2  4E4F                     754m                 TRAP    #15
+000013E4                           755m                 ENDM
+000013E4  5203                     756                                  ADDQ.B #1,D3
+000013E6  3418                     757                                  MOVE.W (A0)+,D2
+000013E8                           758m                                 SC_DISPLAY_NUM D2     
+000013E8  3202                     759m                 MOVE    D2,D1
+000013EA  103C 0003                760m                 MOVE.B  #3, D0
+000013EE  4E4F                     761m                 TRAP    #15
+000013F0                           762m                 ENDM
+000013F0  51CC FFE4                763                          DBRA D4,.loop
+000013F4  6000 0002                764                          BRA .endOSR
+000013F8                           765                          .noItemSelected:
+000013F8                           766  
+000013F8                           767                  ; END OF PART 4
+000013F8                           768                  .endOSR:
+000013F8                           769                  ; RESTORE REGISTERS
+000013F8  4CDF 03FF                770                  MOVEM.L (A7)+,D0-D7/A0-A1
+000013FC  4E75                     771                  rts
+000013FE                           772                  
+000013FE                           773  LP_UPDATE_UI:
+000013FE  48E7 F080                774                  MOVEM.L D0-D3/A0,-(A7)
+00001402                           775                  
+00001402                           776                  ; click?
+00001402  1039 00001599            777                  MOVE.B (LP_MOUSE_PRE),D0
+00001408  4600                     778                  NOT.B   D0
+0000140A  1239 00001598            779                  MOVE.B (LP_MOUSE_BUT),D1
+00001410  C200                     780                  AND.B D0,D1
+00001412  6700 00CA                781                  BEQ .NOmouseCLICK
+00001416                           782                  .mouseCLICK:
+00001416  3039 00001594            783                          MOVE.W (LP_MOUSE_CX),D0
+0000141C  3639 00001596            784                          MOVE.W (LP_MOUSE_CY),D3
+00001422  B67C 00C8                785                          CMP #LP_INITIAL_Y,D3    
+00001426  6C00 0064                786                          BGE .borrar
+0000142A                           787                          .afegir:
+0000142A                           788                                  ; CHECKING BOUNDS
+0000142A  323C 0014                789                                  MOVE.W #LP_NEW_X,D1
+0000142E  3401                     790                                  MOVE.W D1,D2
+00001430  0642 0040                791                                  ADD.W #LP_NEW_WIDTH,D2
+00001434                           792                                  
+00001434  B041                     793                                  CMP D1,D0
+00001436  6B00 0122                794                                  BMI .endOSR
+0000143A  B440                     795                                  CMP D0,D2
+0000143C  6B00 011C                796                                  BMI .endOSR
+00001440                           797                                  ; if program reaches this point all is OK by now
+00001440                           798                                  
+00001440  323C 0014                799                                  MOVE.W #LP_NEW_Y,D1
+00001444  3401                     800                                  MOVE.W D1,D2
+00001446  0642 0020                801                                  ADD.W #LP_NEW_HEIGHT,D2
+0000144A                           802                                  
+0000144A  B641                     803                                  CMP D1,D3
+0000144C  6B00 010C                804                                  BMI .endOSR
+00001450  B443                     805                                  CMP D3,D2
+00001452  6B00 0106                806                                  BMI .endOSR
+00001456                           807                                  ; END OF CHECKING BOUNDS
+00001456                           808                                  
+00001456                           809                                  ; if program reaches this point, the click
+00001456                           810                                  ; has been done into the new item "button".
+00001456                           811                                  
+00001456                           812                                  ; ADD ELEMENT
+00001456                           813                                          ; push data. loop.
+00001456  206F 0018                814                                          MOVE.L 24(A7),A0
+0000145A  3010                     815                                          MOVE.W (A0),D0 ; D0 HOLDS THE AMOUNT OF WORDS TO BE PUSHED IN
+0000145C  3200                     816                                          MOVE.W D0,D1
+0000145E                           817                                          
+0000145E  5340                     818                                          SUBQ #1,D0 ; prepare D0 for DBRA
+00001460                           819                                          .loop:
+00001460  3439 000015AE            820                                                  MOVE.W (INPUT),D2
+00001466  3F02                     821                                                  MOVE.W D2,-(A7)
+00001468  5242                     822                                                  ADD.W #1,D2
+0000146A  33C2 000015AE            823                                                  MOVE.W D2,(INPUT)
+00001470                           824                                                  
+00001470  51C8 FFEE                825                                          DBRA D0,.loop
+00001474  2F08                     826                                          MOVE.L A0,-(A7)
+00001476  6100 FBCE                827                                          BSR LS_PUT
+0000147A  33DF 0000159A            828                                          MOVE.W (A7)+,(LP_ITEM_LAST)
+00001480  544F                     829                                          ADDQ #2,A7 ;RESTORE THE FUCKING STACK
+00001482  C2FC 0002                830                                          MULU.W #2,D1 ; restore bytes x2 = W
+00001486  DFC1                     831                                          ADD.L D1,A7  ; RESTORE A7
+00001488                           832                                         
+00001488                           833                                          
+00001488                           834                                  ; END OF ADD ELEMENT
+00001488                           835                                  
+00001488  6000 00D0                836                                  BRA .endOSR
+0000148C                           837                          .borrar:
+0000148C                           838                          
+0000148C  3039 00001594            839                                  MOVE.W (LP_MOUSE_CX),D0
+00001492  3239 00001596            840                                  MOVE.W (LP_MOUSE_CY),D1
+00001498  B27C 00C8                841                                  CMP #LP_INITIAL_Y,D1
+0000149C  6B00 00B2                842                                  BMI .doesntExist
+000014A0                           843                          
+000014A0                           844                                  
+000014A0  80FC 0020                845                                  DIVU #LP_ITEM_WIDTH,D0
+000014A4  C0BC 0000FFFF            846                                  AND.L #$0000FFFF,D0
+000014AA  5200                     847                                  ADDQ.B #1,D0
+000014AC                           848                                  
+000014AC  0441 00C8                849                                  SUB #LP_INITIAL_Y,D1
+000014B0  82FC 0020                850                                  DIVU #LP_ITEM_HEIGHT,D1
+000014B4  C2BC 0000FFFF            851                                  AND.L #$0000FFFF,D1
+000014BA  5201                     852                                  ADDQ.B #1,D1
+000014BC                           853                                  
+000014BC                           854                                  
+000014BC                           855                          
+000014BC                           856                                          ;ERASE
+000014BC  206F 0018                857                                  MOVE.L 24(A7),A0
+000014C0  2039 0000159C            858                                  MOVE.L (LP_ITEM_SEL),D0
+000014C6  B0BC FFFFFFFF            859                                  CMP.L #$FFFFFFFF,D0
+000014CC  6700 0082                860                                  BEQ .doesntExist
+000014D0  2F00                     861                                  MOVE.L D0,-(A7)   
+000014D2  2F08                     862                                  MOVE.L A0,-(A7)               ;@ LIST
+000014D4  6100 FBBA                863                                  BSR LS_REMOVE
+000014D8  508F                     864                                  ADD.L #8,A7 ; RESTORE STACK
+000014DA  6000 0074                865                                  BRA .doesntExist
+000014DE                           866                  .NOmouseCLICK:
+000014DE  3039 00001594            867                          MOVE.W (LP_MOUSE_CX),D0
+000014E4  3239 00001596            868                          MOVE.W (LP_MOUSE_CY),D1
+000014EA  B27C 00C8                869                          CMP #LP_INITIAL_Y,D1
+000014EE  6B00 0060                870                          BMI .doesntExist
+000014F2                           871                          
+000014F2                           872                          .readELEMENT:
+000014F2                           873                          ; we calculate the element that cursor is pointing at
+000014F2                           874  
+000014F2                           875                                  
+000014F2                           876                                  
+000014F2  80FC 0020                877                                  DIVU #LP_ITEM_WIDTH,D0
+000014F6  C0BC 0000FFFF            878                                  AND.L #$0000FFFF,D0
+000014FC  5200                     879                                  ADDQ.B #1,D0
+000014FE                           880                                  
+000014FE  0441 00C8                881                                  SUB #LP_INITIAL_Y,D1
+00001502  82FC 0020                882                                  DIVU #LP_ITEM_HEIGHT,D1
+00001506  C2BC 0000FFFF            883                                  AND.L #$0000FFFF,D1
+0000150C  5201                     884                                  ADDQ.B #1,D1
+0000150E                           885                                                  ;  l'item seleccionat serà :
+0000150E                           886                                                  ; (#fila-1)*#elementsPerFila + (#columna) elements
+0000150E                           887                                                  ; (#fila-1)*#elementsPerFila + (#columna-1) posicio
+0000150E                           888                                  
+0000150E  2F2F 0018                889                                  MOVE.L 24(A7),-(A7)     ; pointer to the list
+00001512                           890       
+00001512  6100 FC86                891                                  BSR LS_COUNT            ; we count the amount of elements that the list
+00001516                           892                                                          ; is holding
+00001516  341F                     893                                  MOVE.W (A7)+,D2         ; D2 holds the amount of items that figure
+00001518                           894                                                          ; in.
+00001518                           895                                                          
+00001518  544F                     896                                  ADDQ #2,A7              ; restore A7 as far as we have extracter the WORD when we've inputted a LONG
+0000151A                           897                                                          
+0000151A  3F3C 0000                898                                  MOVE.W #0,-(A7)
+0000151E  6100 0090                899                                  BSR LP_ITEMS_PER_LINE
+00001522  361F                     900                                  MOVE.W (A7)+,D3         ; D3 holds the amount of items that a line
+00001524                           901                                                          ; can hold.
+00001524                           902                                  
+00001524  5301                     903                                  SUBQ.B #1,D1
+00001526                           904                                  
+00001526  C6C1                     905                                  MULU.W D1,D3            
+00001528  D640                     906                                  ADD.W  D0,D3            ; D3 indicates the position of the element that is being pointed
+0000152A                           907                                                          ; without an array convention.
+0000152A                           908                                  
+0000152A  B642                     909                                  CMP D2,D3
+0000152C  6E00 0022                910                                  BGT .doesntExist
+00001530                           911                                  .exists:
+00001530                           912                                          
+00001530  5303                     913                                          SUBQ.B #1,D3            ; D3 now has the position of the element with an array convention
+00001532  2F03                     914                                          MOVE.L D3,-(A7)         ; position of the element
+00001534  2F2F 001C                915                                          MOVE.L 28(A7),-(A7)     ; pointer to the list
+00001538  6100 FC8E                916                                          BSR LS_GET_ITEM
+0000153C                           917                                          
+0000153C  588F                     918                                          ADDQ.L #4,A7            ; restaurar SP
+0000153E  207C 00000000            919                                          MOVEA.L #0,A0
+00001544  205F                     920                                          MOVE.L (A7)+,A0
+00001546  23C8 0000159C            921                                          MOVE.L A0,(LP_ITEM_SEL) ; update LP_ITEM_SEL
+0000154C                           922  
+0000154C  6000 000C                923                                          BRA .endOSR
+00001550                           924                                  .doesntExist:
+00001550  23FC FFFFFFFF 0000159C   925                                          MOVE.L #$FFFFFFFF,(LP_ITEM_SEL)
+0000155A                           926                                          
+0000155A                           927                  .endOSR:
+0000155A                           928                  
+0000155A  13F9 00001598 00001599   929                  MOVE.B (LP_MOUSE_BUT),(LP_MOUSE_PRE)
+00001564  4CDF 010F                930                  MOVEM.L (A7)+,D0-D3/A0
+00001568  4E75                     931                  rts
+0000156A                           932                  
+0000156A                           933                  
+0000156A                           934  LP_ISR_MOUSE_MOVE:
+0000156A                           935                  ; SAVE REGISTERS
+0000156A  48E7 C000                936                  MOVEM.L D0-D1,-(A7)
+0000156E                           937                  ;
+0000156E  4281                     938                  CLR.L D1
+00001570  303C 003D                939                  MOVE.W  #61,D0
+00001574  4E4F                     940                  TRAP    #15
+00001576                           941                  ; GETS THE COODRINATES
+00001576  33C1 00001594            942                  MOVE.W D1,(LP_MOUSE_CX) 
+0000157C  4841                     943                  SWAP D1
+0000157E  33C1 00001596            944                  MOVE.W D1,(LP_MOUSE_CY)
+00001584                           945                  
+00001584  C07C 0001                946                  AND.W #1,D0
+00001588  13C0 00001598            947                  MOVE.B D0, (LP_MOUSE_BUT)
+0000158E                           948                  
+0000158E                           949                  
+0000158E                           950                  ; RESTORE REGISTERS
+0000158E  4CDF 0003                951                  MOVEM.L (A7)+,D0-D1
+00001592  4E73                     952                  rte             
+00001594                           953  
+00001594                           954  LP_MOUSE_CX:    ds.w    1
+00001596                           955  LP_MOUSE_CY:    ds.w    1
+00001598                           956  LP_MOUSE_BUT:   ds.b    1
+00001599                           957  LP_MOUSE_PRE:   ds.b    1
+0000159A                           958  LP_ITEM_LAST:   ds.w    1
+0000159C                           959  LP_ITEM_SEL:    ds.l    1
+000015A0                           960                  ds.w    0               ; Memory alignment
+000015A0                           961  
+000015A0= 49 54 45 4D 20 43 ...    962  STRING DC.B 'ITEM COUNT: ',0
+000015AE= 0000                     963  INPUT  DC.W     0
+000015B0                           964                  ds.w    0               ; Memory alignment
+000015B0                           965  
+000015B0                           966  
+000015B0                           967  
+000015B0                           968  LP_ITEMS_PER_LINE:
+000015B0                           969  
+000015B0                           970          * Description:
+000015B0                           971                  ; Given a width of an element this USR just 
+000015B0                           972                  ; calculates the number of elements that fit
+000015B0                           973                  ; into a line.
+000015B0                           974          * MODIFIES: D0,D1,D2
+000015B0                           975          * INPUT: NONE ( user must book a word for the output data )!
+000015B0                           976          * OUTPUT: # ELEMENTS PER LINE
+000015B0                           977  
+000015B0  48E7 E000                978          MOVEM.L D0-D2,-(A7)     ; save registers
+000015B4                           979          
+000015B4                           980                          ; WE GET THE RESOLUTION
+000015B4                           981m         SC_GET_RES      
+000015B4  323C 0000                982m                 MOVE    #0,D1
+000015B8  103C 0021                983m                 MOVE.B  #33, D0
+000015BC  4E4F                     984m                 TRAP    #15
+000015BE                           985m                 ENDM
+000015BE  4841                     986          SWAP D1
+000015C0  C2BC 0000FFFF            987          AND.L #$0000FFFF,D1     ; D1 holds the number of Xpixels
+000015C6  2001                     988          MOVE.L D1,D0            ; COPY THAT TO D0
+000015C8                           989  
+000015C8  82FC 0020                990          DIVU #LP_ITEM_WIDTH,D1  ; D1 holds the SUPPOSED
+000015CC                           991                                  ; amount of boxes that 
+000015CC                           992                                  ; the screen can handle
+000015CC                           993                                  
+000015CC  3401                     994          MOVE.W D1,D2            ; copy that to d2
+000015CE                           995                                  
+000015CE  C2FC 0020                996          MULU #LP_ITEM_WIDTH,D1  ; if we multiplicate this
+000015D2                           997                                  ; theorically we're going to
+000015D2                           998                                  ; get back those Xpixels of
+000015D2                           999                                  ; the begining
+000015D2                          1000                                  
+000015D2                          1001                                  
+000015D2  B240                    1002          CMP D0,D1               ; compare the obtained value
+000015D4                          1003                                  ; with the initial Xpixels
+000015D4                          1004                                  ; that we've obtained
+000015D4                          1005                                                          
+000015D4  6700 0004               1006          BEQ .noRestar           ; if they're equal, that means
+000015D8                          1007                                  ; that the amount of boxes that 
+000015D8                          1008                                  ; fit in a line is an integer
+000015D8                          1009                                  ; and  we're ready to continue
+000015D8                          1010                                                          
+000015D8  5342                    1011          SUBQ #1,D2              ; else, we must substract 1
+000015DA                          1012                                  ; element from the amount of
+000015DA                          1013                                  ; elements per line
+000015DA                          1014          .noRestar:
+000015DA                          1015          
+000015DA  3F42 0010               1016          MOVE.W   D2,16(A7)      ; output value
+000015DE                          1017          
+000015DE                          1018          
+000015DE  4CDF 0007               1019          MOVEM.L (A7)+,D0-D2     ; restore registers
+000015E2  4E75                    1020          RTS
+000015E4                          1021  
+000015E4                          1022  
+000015E4                          1023  
+000015E4                          1024  
+000015E4                          1025  
+000015E4                          1026  
+000015E4                          1027  
+000015E4                          1028  
+000015E4                          1029  
+000015E4                          1030  
+000015E4                          1031  
+000015E4                          1032  
+000015E4                          1033  
+000015E4                          1034  
+000015E4                          1035  
+000015E4                          1036  
+000015E4                          1037  
+000015E4                          1038  
+000015E4                          1039  -------------------- end include --------------------
+000015E4                          1040  ************************************************************
+000015E4                          1041  
+000015E4                          1042  ************************************************************
+000015E4                          1043  *                       MAIN PROGRAM                       *
+000015E4                          1044  ************************************************************
+000015E4                          1045  START:          ; Prepare the parameters to init the list
+000015E4  3F3C 000A               1046                  move.w  #TST_LIST_ITEM_SIZE, -(A7)
+000015E8  3F3C 00C8               1047                  move.w  #TST_LIST_LIST_SIZE, -(A7)
+000015EC  2F3C 00001614           1048                  move.l  #TST_LIST, -(A7)
+000015F2                          1049                  
+000015F2                          1050                  ; Init the list using the list library function
+000015F2  6100 FA0C               1051                  bsr     LS_INIT
+000015F6                          1052                  
+000015F6                          1053                  ; Restore the stack
+000015F6  508F                    1054                  add.l   #8, A7
+000015F8                          1055                          
+000015F8                          1056                  ; Install the user interface    
+000015F8  6100 FC0A               1057                  bsr LP_INSTALL 
+000015FC                          1058                  
+000015FC                          1059                  ; Both LP_UPDATE_UI and LP_PLOT_UI require
+000015FC                          1060                  ; the list pointer as a parameter. We put
+000015FC                          1061                  ; the parameter in the stack here, outside
+000015FC                          1062                  ; the loop, as both functions properly res-
+000015FC                          1063                  ; tore it.
+000015FC  2F3C 00001614           1064                  move.l  #TST_LIST, -(A7)
+00001602                          1065                  
+00001602                          1066                  ; Main loop. It is an infinite loop as there
+00001602                          1067                  ; is no need to exit the program
+00001602                          1068                  
+00001602                          1069                  ; Interact with the user
+00001602  6100 FDFA               1070  .LOOP:          bsr LP_UPDATE_UI
+00001606                          1071  
+00001606                          1072                  ; Plot the interface
+00001606  6100 FC3E               1073                  bsr LP_PLOT_UI
+0000160A  60F6                    1074                  bra     .LOOP
+0000160C                          1075  
+0000160C                          1076                  ; This code is never reached. However, if for some
+0000160C                          1077                  ; reason an exit condition is included in the future,
+0000160C                          1078                  ; this is the exit point: it restores the stack.
+0000160C  588F                    1079                  add.l   #4, A7
+0000160E                          1080                  
+0000160E                          1081                  ; Stop the simulation (again, never reached in this case)
+0000160E  103C 0009               1082                  move.b  #9, d0
+00001612  4E4F                    1083                  trap    #15
+00001614                          1084                  
+00001614                          1085  ************************************************************
+00001614                          1086  *                         VARIABLES                        *
+00001614                          1087  ************************************************************
+00001614                          1088  TST_LIST:       ds.w    TST_LIST_WORDS_TOTAL    ; The list
+000028DE                          1089  TST_MARKER:     ds.w    0       ; No need to align here, as there
+000028DE                          1090                                  ; is no code after this line. However,
+000028DE                          1091                                  ; the label could be used to compute
+000028DE                          1092                                  ; the code size (it is TST_MARKER-$1000).
+000028DE                          1093  ************************************************************
+000028DE                          1094          END     START
+
+No errors detected
+No warnings generated
+
+
+SYMBOL TABLE INFORMATION
+Symbol-name         Value
+-------------------------
+INPUT               15AE
+LP_INITIAL_Y        C8
+LP_INSTALL          1204
+LP_ISR_MOUSE_MOVE   156A
+LP_ITEMS_PER_LINE   15B0
+LP_ITEMS_PER_LINE:NORESTAR  15DA
+LP_ITEM_HEIGHT      20
+LP_ITEM_LAST        159A
+LP_ITEM_SEL         159C
+LP_ITEM_WIDTH       20
+LP_MOUSE_BUT        1598
+LP_MOUSE_CX         1594
+LP_MOUSE_CY         1596
+LP_MOUSE_PRE        1599
+LP_NEW_HEIGHT       20
+LP_NEW_WIDTH        40
+LP_NEW_X            14
+LP_NEW_Y            14
+LP_PLOT_UI          1246
+LP_PLOT_UI:DONTCHANGELINE  1324
+LP_PLOT_UI:DONTDRAW  132A
+LP_PLOT_UI:DRAWELEMENTS  12F2
+LP_PLOT_UI:ENDOSR   13F8
+LP_PLOT_UI:ITEMSELECTED  13C2
+LP_PLOT_UI:LOOP     13D6
+LP_PLOT_UI:NOITEMSELECTED  13F8
+LP_SCREEN_HEIGHT    1E0
+LP_SCREEN_WIDTH     280
+LP_UPDATE_UI        13FE
+LP_UPDATE_UI:AFEGIR  142A
+LP_UPDATE_UI:BORRAR  148C
+LP_UPDATE_UI:DOESNTEXIST  1550
+LP_UPDATE_UI:ENDOSR  155A
+LP_UPDATE_UI:EXISTS  1530
+LP_UPDATE_UI:LOOP   1460
+LP_UPDATE_UI:MOUSECLICK  1416
+LP_UPDATE_UI:NOMOUSECLICK  14DE
+LP_UPDATE_UI:READELEMENT  14F2
+LS_COUNT            119A
+LS_COUNT:END        11BC
+LS_COUNT:LOOP       11AC
+LS_FIRST            1108
+LS_FIRST:END        112E
+LS_FIRST:ISNULL     1126
+LS_GET_ITEM         11C8
+LS_GET_ITEM:INCREMENTANDLOOP  11EC
+LS_GET_ITEM:LOOP    11D8
+LS_GET_ITEM:RETURN  11FA
+LS_GET_ITEM:RETURNNULL  11F4
+LS_INIT             1000
+LS_INIT:LOOP        1030
+LS_NEXT             1134
+LS_NEXT:ENDOSR      1154
+LS_NEXT:ISNULL      114E
+LS_PREVIOUS         115E
+LS_PREVIOUS:ENDOSR  1194
+LS_PREVIOUS:FINISH  1184
+LS_PREVIOUS:HASNOPREVIOUS  118C
+LS_PREVIOUS:LOOP    1176
+LS_PUT              1046
+LS_PUT:END          108A
+LS_PUT:LIST_FULL    1082
+LS_PUT:LOOP         1078
+LS_REMOVE           1090
+LS_REMOVE:AFEGIRALLIURES  10F8
+LS_REMOVE:NOTEPREVI  10D4
+LS_REMOVE:TENEXTNP  10F0
+LS_REMOVE:TENEXTP   10CE
+LS_REMOVE:TEPREVI   10B2
+SC_CLEAR            19C
+SC_DISABLE_DBUFFER  243
+SC_DISPLAY_NUM      3BD
+SC_DISP_STRNUM      2A1
+SC_DRAW_RECT        2E6
+SC_ENABLE_DBUFFER   20B
+SC_GET_RES          386
+SC_LOCATE           B0
+SC_PRINT_STR        1D7
+SC_REPAINT_SCREEN   27B
+SC_SET_FILL         165
+SC_SET_FULLSCREEN   79
+SC_SET_PEN          12E
+SC_SET_RES          0
+SC_SET_WINDOWED     42
+START               15E4
+START:LOOP          1602
+STRING              15A0
+TST_LIST            1614
+TST_LIST_ITEM_SIZE  A
+TST_LIST_LIST_SIZE  C8
+TST_LIST_WORDS_HEADER  5
+TST_LIST_WORDS_TOTAL  965
+TST_MARKER          28DE
